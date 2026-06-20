@@ -1,0 +1,50 @@
+<!-- siem/wazuh_custom_rules.xml -->
+<!-- Deploy to: /var/ossec/etc/rules/sentinelflow_rules.xml -->
+<!-- Restart wazuh-manager after deploying: systemctl restart wazuh-manager -->
+<group name="sentinelflow,threat_intel,">
+
+  <rule id="100001" level="10">
+    <if_group>web</if_group>
+    <field name="data.srcip">\.+</field>
+    <description>SentinelFlow: Web request from monitored source IP</description>
+    <mitre><id>T1190</id></mitre>
+  </rule>
+
+  <rule id="100002" level="12">
+    <if_sid>100001</if_sid>
+    <field name="data.srcip">^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)</field>
+    <description>SentinelFlow: Internal lateral movement from flagged host</description>
+    <mitre><id>T1021</id></mitre>
+  </rule>
+
+  <rule id="100010" level="14">
+    <if_group>authentication_failed</if_group>
+    <same_source_ip />
+    <timeframe>60</timeframe>
+    <frequency>10</frequency>
+    <description>SentinelFlow: Brute force — 10 auth failures in 60s from same IP</description>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <rule id="100020" level="15">
+    <if_group>syscheck</if_group>
+    <field name="syscheck.path">/etc/passwd|/etc/shadow|/etc/sudoers</field>
+    <description>SentinelFlow: Critical credential file modified</description>
+    <mitre><id>T1003</id></mitre>
+  </rule>
+
+  <rule id="100030" level="13">
+    <if_group>process_monitor</if_group>
+    <field name="process.name">nc|ncat|socat|netcat</field>
+    <description>SentinelFlow: Known reverse shell binary detected</description>
+    <mitre><id>T1059</id></mitre>
+  </rule>
+
+  <rule id="100031" level="13">
+    <if_group>process_monitor</if_group>
+    <field name="process.cmdline">python.*-c.*import|bash.*-i|sh.*-i</field>
+    <description>SentinelFlow: Inline interpreter shell spawn detected</description>
+    <mitre><id>T1059</id></mitre>
+  </rule>
+
+</group>

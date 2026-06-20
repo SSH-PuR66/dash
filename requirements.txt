@@ -1,0 +1,7 @@
+# --- requirements.txt ---
+kafka-python-ng==2.2.2
+elasticsearch==8.10.4
+neo4j==5.13.0
+flask==3.0.0
+requests==2.31.0
+urllib3==2.1.0
