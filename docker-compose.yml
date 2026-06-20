@@ -1,0 +1,165 @@
+# --- docker-compose.yml ---
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "2181" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=changeme
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf -u elastic:changeme http://localhost:9200/_cluster/health | grep -v red" ]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.10.4
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=changeme
+    ports:
+      - "5601:5601"
+
+  neo4j:
+    image: neo4j:5.13.0
+    environment:
+      NEO4J_AUTH: neo4j/changeme
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 1g
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "cypher-shell -u neo4j -p changeme 'RETURN 1'" ]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.7.0
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515"
+      - "55000:55000"
+    volumes:
+      - ./SIEM/wazuh_custom_rules.xml:/var/ossec/etc/rules/sentinelflow_rules.xml:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf https://localhost:55000 -k || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  intel-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python ingestion/kafka_producer.py
+    env_file: .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  intel-normalizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python ingestion/feed_normalizer.py
+    env_file: .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  graph-loader:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python entity_graph/graph_loader.py
+    env_file: .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alert-enricher:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python siem/alert_enricher.py
+    env_file: .env
+    ports:
+      - "5001:5001"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python api/query_layer.py
+    env_file: .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  es_data:
+  neo4j_data:
