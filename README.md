@@ -1,5 +1,11 @@
 # dash
 
+**Created and maintained by [Sergio Rodriguez (SSH-PuR66)](https://github.com/SSH-PuR66).**
+
+**Trace an indicator through the pipeline.** This repository connects feed ingestion, an entity graph, an API, and a dashboard. Follow [ingestion](ingestion/) → [graph processing](entity_graph/) → [API](api/) → [dashboard](dashboard/); [docker-compose.yml](docker-compose.yml) records how the services are wired.
+
+The repository is a source prototype. Its architecture describes the implementation, rather than a claim of a staffed or deployed security operations service.
+
 > A threat intelligence operations platform that ingests feeds, enriches alerts, correlates indicators, and serves analyst-facing APIs and dashboards.
 
 <table>
